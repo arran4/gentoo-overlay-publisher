@@ -51,6 +51,10 @@
   <h2>Safety and verification</h2>
   <p>Publishing must reconcile a freshly read target state and produce an overlay-only branch and pull request rather than committing directly to the default branch. Verification may independently use G2 and Portage; secret-bearing publication tests must run only from trusted workflows.</p>
 
+  <h2>Configuration and workflows</h2>
+  <p>The workflow author chooses when to invoke the Action: after a published GitHub Release, after their existing GoReleaser upload step, or through another trusted workflow trigger. A separate custom candidate manifest is not normally required. The publisher may read a restricted set of archive/build hints from the matching GoReleaser configuration, combine them with explicitly configured Gentoo policy and apply safe defaults.</p>
+  <p><a href="https://github.com/arran4/gentoo-overlay-publisher/blob/main/docs/configuration.md">Configuration design and future quick-start examples</a> · <a href="https://github.com/arran4/gentoo-overlay-publisher/blob/main/LICENSE.md">MIT license</a></p>
+
   <h2>Coming documentation</h2>
   <p>Once implemented and verified, this site will grow to include Action inputs and outputs, CLI examples, Go package API references, candidate-source formats, PR strategies and Gentoo end-to-end integration guides. Until then, examples here describe design intent, not a runnable released interface.</p>
 
