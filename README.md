@@ -16,6 +16,60 @@ Gentoo Overlay Publisher generates and publishes **Gentoo ebuilds to install app
 
 The design targets **one repository and one root `go.mod`**, with narrow public package imports. Release-tool-specific YAML parsing, `dist/artifacts.json` processing and GitHub API operations belong in adapters, not the core library.
 
+## Quick start (planned Action usage)
+
+**These examples are design previews, not runnable commands yet.** The `@v1` Action tag will be created only after implementation, real smoke tests and release. The Action is intended to run **after** GoReleaser has finished building and publishing the upstream binary archives; it never creates or uploads those archives.
+
+### Option A: separate workflow on a published release
+
+```yaml
+name: Publish Gentoo ebuild
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish-ebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: arran4/gentoo-overlay-publisher@v1 # future tag
+        with:
+          overlay-repository: arran4/gentoo-overlay-publisher-smoke-overlay
+          package: app-text/header-bin
+          source: github-release
+          goreleaser-config: auto
+          token: ${{ secrets.OVERLAY_PUBLISH_TOKEN }}
+```
+
+### Option B: directly after an existing GoReleaser release step
+
+```yaml
+# Place this AFTER your existing successful GoReleaser release step.
+- uses: arran4/gentoo-overlay-publisher@v1 # future tag
+  with:
+    overlay-repository: arran4/gentoo-overlay-publisher-smoke-overlay
+    package: app-text/header-bin
+    source: goreleaser-artifacts
+    artifact-directory: dist
+    goreleaser-config: auto
+    token: ${{ secrets.OVERLAY_PUBLISH_TOKEN }}
+```
+
+Neither trigger is imposed by the tool; the workflow author chooses the schedule, event or calling job. On publish, the tool **plans automatically against the current overlay state** and opens a reviewable PR. A saved plan is optional.
+
+### Optional configuration
+
+For common GoReleaser layouts, auto-discover the matching `.goreleaser.yml` or `.goreleaser.yaml` at the relevant release tag/commit. Read **only supported archive/build hints**, not GoReleaser's entire configuration or templating language. The publisher-specific `.gentoo-overlay-publisher.yaml` is available for Gentoo installation, metadata and PR policy **when needed**, rather than being compulsory.
+
+See [configuration rules, safe defaults, legacy compatibility and more examples](docs/configuration.md). The intended project license is [MIT](LICENSE.md), matching GoReleaser while preserving required [source attribution](THIRD_PARTY_NOTICES.md).
+
 ## Documentation
 
 - [Documentation website (GitHub Pages, once enabled)](https://arran4.github.io/gentoo-overlay-publisher/)
