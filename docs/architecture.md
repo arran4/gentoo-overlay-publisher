@@ -37,7 +37,7 @@ G2/Portage may be used separately to verify generated outputs. The public librar
 
 **GitHub Action (first-class, intended routine usage):** a thin wrapper on the Go executable. An ordinary workflow should need source release identification, target overlay, package identity and credentials. It should not need a bespoke candidate YAML for conventional published release assets. **The caller chooses its trigger**: separate `release.published` workflows, invocation after a successful GoReleaser release in the same job, manually dispatched workflows and other trusted triggers must be supported by the same engine. See [quick starts](../README.md#quick-start-planned-action-usage) and [configuration design](configuration.md).
 
-**Minimal CLI (scripts and local):** implicit `publish` for an explicit target and input; explicit `plan` is read-only, explicit `apply` modifies only local overlay content. Default `publish` constructs its plan from fresh remote state; saved plans are not required and must be revalidated if supplied.
+**Minimal CLI (scripts and local):** implicit `publish` for an explicit package and target; explicit `plan` is read-only, explicit `apply` modifies only local overlay content. **Neither `plan` nor `apply` is a prerequisite** to Action/CLI publishing. Default `publish` resolves the tag from reliable release context or GoReleaser `dist/metadata.json` when available, constructs an ephemeral plan against current remote overlay state, and opens a PR. Saved plans are optional and must be revalidated if supplied. Tag override is `--tag` / Action `tag`; latest published release is opt-in with a warning, not the automatic guess.
 
 **Go library:** an independently importable typed install IR and renderer for binary ebuilds, plus pure overlay reconciliation (`version`, `metadata`, `manifest`, `overlay`). One Go module. The library must not import GitHub, G2 or GoReleaser. Public IR should support today's needed install operations while leaving reasonable extension points for future Gentoo package constructs without implementing a full shell parser.
 
@@ -69,6 +69,14 @@ Preserve **explicit** GoReleaser Gentoo install settings, Gentoo installation co
 
 **License fixed:** this public repository is MIT, matching [GoReleaser's MIT license](https://github.com/goreleaser/goreleaser/blob/main/LICENSE.md). Preserve required upstream copyright and attribution, and use [third-party notices](../THIRD_PARTY_NOTICES.md) when source is adapted. The repository's license is **not** necessarily the Gentoo `LICENSE` of each package being published.
 
+## Release tag and publish orchestration
+
+An Action or CLI invocation performs **a single publish operation**. It selects and validates the already-published upstream release, optionally reads compatible `gentoo_overlays` from the release's GoReleaser YAML, constructs the IR and ebuild, calculates a fresh overlay ChangeSet, and opens a reviewable overlay PR. An explicit `plan` and local `apply` are optional independent uses, not required stages of a workflow.
+
+Resolve release identity in decreasing order of strength: explicit Action `tag` / CLI `--tag`; `release.published` event `release.tag_name`; GoReleaser `dist/metadata.json` tag/version/commit (not `artifacts.json`); trusted `GORELEASER_CURRENT_TAG` / GitHub tag ref; unique tag pointing to Git HEAD; optionally latest **published stable** release only with `--tag latest` or `--allow-latest`. Validate actual published release assets and project identity even if a tag is resolved; missing evidence permits fallback, *disagreement of actively used sources fails*. An explicit historical tag must not accidentally reuse stale `dist` files. Emit provenance and warnings.
+
+[Full tag detection and sample invocations](configuration.md#release-tag-resolution-zero-setup-publish-deterministic-and-fail-safe). [#13](https://github.com/arran4/gentoo-overlay-publisher/issues/13) tracks focused implementation and tests. This is a **resolved design / implementable contract**, not a blocker to writing the first implementation prompt.
+
 ## Overlay publishing and safety
 
 - Incremental updates modify only an explicitly owned package and its required package files. Unrelated ebuilds and packages remain unchanged.
@@ -86,6 +94,7 @@ Preserve **explicit** GoReleaser Gentoo install settings, Gentoo installation co
 | 2 — Ebuild construction | [#3](https://github.com/arran4/gentoo-overlay-publisher/issues/3) | Full relevant builder/IR/render extraction, all helper families, source golden tests, refactored files/types |
 | 3 — Overlay management | [#4](https://github.com/arran4/gentoo-overlay-publisher/issues/4) | Metadata, Manifest, versions/revisions, safe deterministic ChangeSet |
 | 3.5 — Configuration resolution | [#12](https://github.com/arran4/gentoo-overlay-publisher/issues/12) | Contextual GoReleaser hints, safe defaults, Action overrides and explainable provenance |
+| 3.75 — Release tag identity | [#13](https://github.com/arran4/gentoo-overlay-publisher/issues/13) | Event/dist/env/ref/optional latest resolution, tag provenance and fail-safe validation |
 | 4 — GoReleaser adapter | [#5](https://github.com/arran4/gentoo-overlay-publisher/issues/5) | Published binary archive discovery without building/publishing artifacts |
 | 5 — CLI | [#6](https://github.com/arran4/gentoo-overlay-publisher/issues/6) | Implicit publish, explicit plan and local-only apply |
 | 6 — First-class Action | [#7](https://github.com/arran4/gentoo-overlay-publisher/issues/7) | Same execution engine, Action input/output contract and PR publishing |
