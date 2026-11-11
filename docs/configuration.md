@@ -64,7 +64,7 @@ In the original fork `bin` **must be true** and `type` is effectively limited to
 
 ### Install item shape: do not reinvent it
 
-The eleven item families `dobin`, `doconfd`, `doenvd`, `doexe`, `doheader`, `doinitd`, `doins`, `dosbin`, `dosym`, `systemd` (plus their supported behaviors) share the fork's item shape:
+The ten item families `dobin`, `doconfd`, `doenvd`, `doexe`, `doheader`, `doinitd`, `doins`, `dosbin`, `dosym`, `systemd` (plus their supported behaviors) share the fork's item shape:
 
 ```yaml
 doins:
