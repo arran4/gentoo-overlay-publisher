@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Gentoo Overlay Publisher — provider-neutral Go library and GitHub Action for building ebuilds and safely publishing Gentoo overlay updates.">
+  <meta name="description" content="Gentoo Overlay Publisher — Go library and GitHub Action for publishing binary-install ebuilds from existing release assets.">
   <meta name="color-scheme" content="light dark">
   <title>Gentoo Overlay Publisher — Documentation</title>
   <style>
@@ -29,11 +29,12 @@
 <main>
   <p class="eyebrow">Documentation · Gentoo tooling</p>
   <h1>Gentoo Overlay Publisher</h1>
-  <p class="lead">A reusable ebuild construction and overlay reconciliation library, plus a GitHub Action for proposing safe Gentoo overlay updates.</p>
-  <div class="status"><strong>Project status:</strong> Design and foundation. The library, executable and Action are not yet released. This documentation is an intentionally lightweight starting point.</div>
+  <p class="lead">A Go library and GitHub Action that generate Gentoo ebuilds for binaries already released by GoReleaser, then propose overlay updates through pull requests.</p>
+  <div class="status"><strong>Project status:</strong> Design and foundation. The library, executable and Action are not yet released. This documentation is an intentionally lightweight starting point.<p><strong>Boundary:</strong> The publisher does not compile or upload upstream binaries, and does not create application releases. It publishes ebuilds and required overlay metadata only.</p></div>
   <nav aria-label="Project links">
     <a href="https://github.com/arran4/gentoo-overlay-publisher">Source repository</a>
     <a href="https://github.com/arran4/gentoo-overlay-publisher-smoke-overlay">Smoke-test overlay</a>
+    <a href="https://github.com/arran4/gentoo-overlay-publisher/blob/main/docs/architecture.md">Architecture and roadmap</a>
     <a href="https://github.com/arran4/goreleaser/pull/37">Original implementation reference</a>
   </nav>
 
@@ -45,10 +46,10 @@
   </div>
 
   <h2>Intended source inputs</h2>
-  <p>Release assets and metadata may come from GitHub Releases, a restricted GoReleaser metadata adapter, local generated package trees or a dedicated typed manifest. Users should not be forced to write a custom candidate YAML just to publish a conventional release.</p>
+  <p>The first integration targets already published GoReleaser-produced binary archives, using GitHub Release assets and, when available, GoReleaser artifact metadata. Other release systems remain deferred, and routine users should not need a custom YAML manifest.</p>
 
   <h2>Safety and verification</h2>
-  <p>Publishing must reconcile a freshly read target state and produce a branch and pull request rather than committing directly to the default branch. Verification may independently use G2 and Portage; secret-bearing publication tests must run only from trusted workflows.</p>
+  <p>Publishing must reconcile a freshly read target state and produce an overlay-only branch and pull request rather than committing directly to the default branch. Verification may independently use G2 and Portage; secret-bearing publication tests must run only from trusted workflows.</p>
 
   <h2>Coming documentation</h2>
   <p>Once implemented and verified, this site will grow to include Action inputs and outputs, CLI examples, Go package API references, candidate-source formats, PR strategies and Gentoo end-to-end integration guides. Until then, examples here describe design intent, not a runnable released interface.</p>
