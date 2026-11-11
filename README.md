@@ -16,6 +16,33 @@ Gentoo Overlay Publisher generates and publishes **Gentoo ebuilds to install app
 
 The design targets **one repository and one root `go.mod`**, with narrow public package imports. Release-tool-specific YAML parsing, `dist/artifacts.json` processing and GitHub API operations belong in adapters, not the core library.
 
+## Portable GoReleaser-compatible Gentoo configuration
+
+The optional `.gentoo-overlay-publisher.yaml` uses the **same `gentoo_overlays` fields as the Gentoo section of the existing GoReleaser fork**. Existing `doexe`, `dobin`, `doins`, `doman`, `dodoc`, `systemd`, `src_id`, conditional `use` and architecture `archs` rules remain in scope. The new file **does not require** the unrelated GoReleaser `builds`, `archives` or release-upload sections.
+
+```yaml
+# Optional .gentoo-overlay-publisher.yaml — proposed, not yet implemented
+version: 1
+gentoo_overlays:
+  - name: header
+    category: app-text
+    license: MIT
+    doexe:
+      - src_id: default
+        src: header
+        dst: /usr/bin/header
+    repository:
+      owner: arran4
+      name: gentoo-overlay-publisher-smoke-overlay
+      pull_request:
+        enabled: true
+        draft: true
+```
+
+For normal GoReleaser workflows, the publisher should **also read an existing `gentoo_overlays` block directly from the matching `.goreleaser.yml` or `.goreleaser.yaml`**, if present, without requiring a second config file. The YAML helper schema should be copyable across with virtually no translation; internal Go types and source files must be refactored into provider-neutral, cohesive packages rather than simply copied.
+
+Full supported vocabulary, migration examples, compatibility testing and planned public package boundaries are in [configuration design](docs/configuration.md).
+
 ## Quick start (planned Action usage)
 
 **These examples are design previews, not runnable commands yet.** The `@v1` Action tag will be created only after implementation, real smoke tests and release. The Action is intended to run **after** GoReleaser has finished building and publishing the upstream binary archives; it never creates or uploads those archives.
@@ -66,7 +93,7 @@ Neither trigger is imposed by the tool; the workflow author chooses the schedule
 
 ### Optional configuration
 
-For common GoReleaser layouts, auto-discover the matching `.goreleaser.yml` or `.goreleaser.yaml` at the relevant release tag/commit. Read **only supported archive/build hints**, not GoReleaser's entire configuration or templating language. The publisher-specific `.gentoo-overlay-publisher.yaml` is available for Gentoo installation, metadata and PR policy **when needed**, rather than being compulsory.
+For GoReleaser workflows, auto-discover the matching `.goreleaser.yml` or `.goreleaser.yaml` at the release tag/commit and accept its original `gentoo_overlays` entries when present. Read only the supported `builds`/`archives` hints required to reconcile *already published* assets; never execute GoReleaser's build configuration or arbitrary templates. An optional `.gentoo-overlay-publisher.yaml` uses the **same Gentoo fields** for selective overrides and new package policy rather than duplicating an entire release config.
 
 See [configuration rules, safe defaults, legacy compatibility and more examples](docs/configuration.md). The intended project license is [MIT](LICENSE.md), matching GoReleaser while preserving required [source attribution](THIRD_PARTY_NOTICES.md).
 
