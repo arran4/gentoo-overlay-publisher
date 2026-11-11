@@ -77,6 +77,7 @@ Preserve **explicit** GoReleaser Gentoo install settings, Gentoo installation co
 | 1 — Design freeze | [#2](https://github.com/arran4/gentoo-overlay-publisher/issues/2) | Stable scope, Go types, metadata, licensing and dependency rules |
 | 2 — Ebuild construction | [#3](https://github.com/arran4/gentoo-overlay-publisher/issues/3) | Full relevant builder/IR/render extraction from fork PR #37 |
 | 3 — Overlay management | [#4](https://github.com/arran4/gentoo-overlay-publisher/issues/4) | Metadata, Manifest, versions/revisions, safe deterministic ChangeSet |
+| 3.5 — Configuration resolution | [#12](https://github.com/arran4/gentoo-overlay-publisher/issues/12) | Contextual GoReleaser hints, safe defaults, Action overrides and explainable provenance |
 | 4 — GoReleaser adapter | [#5](https://github.com/arran4/gentoo-overlay-publisher/issues/5) | Published binary archive discovery without building/publishing artifacts |
 | 5 — CLI | [#6](https://github.com/arran4/gentoo-overlay-publisher/issues/6) | Implicit publish, explicit plan and local-only apply |
 | 6 — First-class Action | [#7](https://github.com/arran4/gentoo-overlay-publisher/issues/7) | Same execution engine, Action input/output contract and PR publishing |
@@ -90,7 +91,7 @@ The [dedicated smoke overlay](https://github.com/arran4/gentoo-overlay-publisher
 
 1. **Invocation trigger decided:** users choose their own workflow trigger. Publish on `release.published`, after a successful same-job release or from an explicitly configured trusted workflow; provide multiple pasteable examples, never force one scheduling model.
 2. **Binary/archive layout defaults.** Proposed first fixture: [arran4/header v0.0.6](https://github.com/arran4/header/releases/tag/v0.0.6), a published GoReleaser release with Linux/386, amd64 and arm64 tar.gz archives. The reference [app-text/header-bin](https://github.com/arran4/arrans_overlay/tree/main/app-text/header-bin) package already exists; test output must go to the dedicated smoke overlay, **not** the live overlay. Confirm install-path and auxiliary-file policy; do not blindly copy older archive architecture guards. Richer follow-up fixture: [go-playerctl v0.0.23](https://github.com/arran4/go-playerctl/releases/tag/v0.0.23).
-3. **Licensing decided:** match GoReleaser under the MIT license; retain source attribution and copyright notices when extracting material from [fork PR #37](https://github.com/arran4/goreleaser/pull/37).
+3. **Licensing decided:** match GoReleaser under the MIT license; retain source attribution and copyright notices when extracting material from [fork PR #37](https://github.com/arran4/goreleaser/pull/37). License and notices are included in PR #11.
 4. **PR ownership and credential policy remains:** prefer new Draft PRs on tool-owned branches, no force-push by default; caller supplies cross-repository target permissions securely. No credentials in arbitrary untrusted PR workflows.
 
 Design choices such as other release-producer support, source ebuild generation, full Bash analysis, G2 integration and automatic overlay-wide ownership deletion are **not blockers** for the GoReleaser-first binary workflow.
