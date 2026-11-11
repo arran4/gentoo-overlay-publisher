@@ -151,6 +151,70 @@ Keep existing `gentoo_overlays` entries in GoReleaser `.goreleaser.yaml` or `.go
 
 **Legacy publishing fields:** accept the existing `repository` shape (owner, name, branch, `pull_request.enabled/base/draft`) and `commit_author`/`commit_msg_template`. Map them into a distinct publisher config. Historical inline `repository.token`, `pull_request.token` and `git.private_key` require a deliberate, secure migration policy—do not copy secrets into candidate plans or parsed artifact metadata. Translate legacy `skip_upload` to an explicit **nonpublishing** mode rather than treating it as permission to upload binaries. Distinguish package versions from the publisher's own repo version.
 
+## Release tag resolution: zero-setup publish, deterministic and fail-safe
+
+**Confirmed intent:** the user normally calls just the Action or `gentoo-overlay-publisher` with a package and overlay destination. **`publish` is implicit and internally creates its own fresh ephemeral plan**. Neither `plan`, `apply` nor a saved JSON plan is required for GoReleaser or any other regular publishing workflow. The source binary release is already built and published elsewhere.
+
+The release tag is selected separately from the Gentoo ebuild version. **GoReleaser writes `dist/metadata.json` with `tag`, `version`, `commit` and `project_name`**, whereas `dist/artifacts.json` contains the artifact index. Parse them independently and verify they refer to the *same published release*. `dist` can be changed in GoReleaser config or passed through `--dist` / `artifact-directory`.
+
+### Tag selection and fallback
+
+| Priority | Candidate source | Validation / warning |
+| --- | --- | --- |
+| 1 | Explicit `--tag TAG` / Action `tag: TAG` | Overrides automatic selection. Can target an older release without moving Git HEAD. Must still be a published release with validated assets |
+| 2 | GitHub release event `github.event.release.tag_name` | Use only for an actual release event for the selected producer repository. This is the preferred zero-config event-based path |
+| 3 | GoReleaser `dist/metadata.json` `tag` | For same-job post-release use; validate `version`/`commit` where possible and cross-check downloaded Release assets |
+| 4 | Explicit `GORELEASER_CURRENT_TAG` environment, or `GITHUB_REF_NAME` if `GITHUB_REF_TYPE=tag` | Accept only when source repository and tag identity can be verified; branch names are never release tags |
+| 5 | Exactly one Git tag at checked-out HEAD | Only with a genuine source checkout; reject multiple possible tags. Never fall back to the highest tag in the repository merely because no tag points to HEAD |
+| 6 | Latest published release via API | **Only with explicit opt-in** (`--tag latest` or `--allow-latest` / Action `allow-latest: true`). Emit warning showing resolved version/tag and why it may differ from this workflow's original intent |
+
+**Missing source:** continue to the next candidate, recording a diagnostic. **Contradictory sources actively used together:** fail, report expected and found tags, and identify a corrective flag. An explicit `--tag` is intended to override unrelated current Git context; ignore an unselected local `dist` with a warning, not silently combine its artifacts with the requested historical release. If `dist/metadata.json` is used as the selected source, stale/mismatching `dist/artifacts.json` or files are a hard failure.
+
+**Do not trust `latest` silently:** a scheduled/manual rerun of a historical workflow could accidentally consume newer assets. Default `auto` should fail with an actionable message if there is no reliable tag. The user may explicitly choose `latest` for convenience; default latest means latest **stable published** GitHub release, with prerelease selection an explicit separate policy. A warning does not make an unavailable/draft release or untrusted archive publishable.
+
+**Release fact validation:** tag exists for the source repository; GitHub Release is published (not draft); selected archive URLs, platform coverage, file members and checksums are consistent and suitable for Gentoo; optional release commit checks against dist metadata. Convert to Gentoo PV only **after** resolving the release tag using the fork's `version_representation` logic. Never use current default-branch HEAD as a proxy for the release ref.
+
+**Action/CLI options (proposed):** Action `tag`, `allow-latest`, `source-repository`, `artifact-directory`, `source`; CLI `--tag`, `--allow-latest`, `--release-repository`, `--dist`, `--explain-config`. The selected source/tag/version/provenance and any warning must be visible in the Action log, PR description and machine-readable `plan`/diagnostic output, without credentials. Test these as an independent unit using fakes and fixture files.
+
+### The smallest possible Action invocation
+
+```yaml
+# After the project's existing GoReleaser release/upload workflow step.
+# Illustrative only: Action @v1 is NOT published.
+- uses: arran4/gentoo-overlay-publisher@v1
+  with:
+    overlay-repository: arran4/gentoo-overlay-publisher-smoke-overlay
+    package: app-text/header-bin
+    token: ${{ secrets.OVERLAY_PUBLISH_TOKEN }}
+```
+
+The Action auto-detects a release event, or matching `dist/metadata.json` when available; derives the archive selection from GoReleaser's existing `gentoo_overlays` stanza and release assets; plans internally; opens an overlay PR. A full publisher-specific YAML, separate `plan` job, explicit tag or `apply` is **not** required for the straightforward case. An Action invoked in an unrelated branch context or without a matching release must fail safely rather than publishing a guessed version.
+
+### Explicit historical release backfill
+
+```yaml
+# Manual/scheduled run, targeting an existing published historical tag.
+- uses: arran4/gentoo-overlay-publisher@v1 # FUTURE
+  with:
+    tag: v0.0.6
+    source-repository: arran4/header
+    overlay-repository: arran4/gentoo-overlay-publisher-smoke-overlay
+    package: app-text/header-bin
+    token: ${{ secrets.OVERLAY_PUBLISH_TOKEN }}
+```
+
+```sh
+# Equivalent future local CLI, with default publish; no 'plan' prerequisite.
+gentoo-overlay-publisher --tag v0.0.6 \
+  --release-repository arran4/header \
+  --repository arran4/gentoo-overlay-publisher-smoke-overlay \
+  --package app-text/header-bin
+```
+
+When intentionally selecting an old tag, use that tag's release assets and source config, **not** current `dist` or default-branch config.
+
+**Acceptance issue:** [#13 release/tag resolution](https://github.com/arran4/gentoo-overlay-publisher/issues/13), tied to [#5 GoReleaser adapter](https://github.com/arran4/gentoo-overlay-publisher/issues/5) and [#7 Action](https://github.com/arran4/gentoo-overlay-publisher/issues/7). This is a bounded implementation task, **not** a remaining blocking product-design decision.
+
 ## Public Go API and refactor plan
 
 **Default compatibility direction:** match existing Gentoo YAML keys, named install helpers and behavior while **refactoring the internal code** to form a cohesive public library. There are no pre-existing standalone library consumers that force awkward GoReleaser package boundaries.
