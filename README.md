@@ -43,6 +43,22 @@ For normal GoReleaser workflows, the publisher should **also read an existing `g
 
 Full supported vocabulary, migration examples, compatibility testing and planned public package boundaries are in [configuration design](docs/configuration.md).
 
+## Default usage: publish immediately, with no explicit plan or release tag
+
+A normal Action invocation should require **only enough information to identify the package and overlay** (plus target-repository authentication). It discovers a reliable GoReleaser release tag, generates the ebuild from existing published binaries, calculates/validates a temporary internal plan, then opens a reviewable overlay PR. A user does **not** need to invoke `plan`, save a plan, run `apply`, upload a release, or create a second publisher YAML.
+
+```yaml
+# Place after an existing successful GoReleaser publication.
+# Future Action, not yet implemented or released.
+- uses: arran4/gentoo-overlay-publisher@v1
+  with:
+    overlay-repository: arran4/gentoo-overlay-publisher-smoke-overlay
+    package: app-text/header-bin
+    token: ${{ secrets.OVERLAY_PUBLISH_TOKEN }}
+```
+
+A release event supplies `release.tag_name`; a post-release job may supply `dist/metadata.json` (`tag`, `version`, `commit`). An explicit Action `tag` or CLI `--tag` overrides discovery, including historical backfills. Git tag/environment context follows; **latest published release is an opt-in last resort**, warning with the chosen tag. Missing evidence may fall back, but contradictory or stale release identities must fail rather than silently publish the wrong version. See [release-tag rules and examples](docs/configuration.md#release-tag-resolution-zero-setup-publish-deterministic-and-fail-safe) and [issue #13](https://github.com/arran4/gentoo-overlay-publisher/issues/13).
+
 ## Quick start (planned Action usage)
 
 **These examples are design previews, not runnable commands yet.** The `@v1` Action tag will be created only after implementation, real smoke tests and release. The Action is intended to run **after** GoReleaser has finished building and publishing the upstream binary archives; it never creates or uploads those archives.
