@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Gentoo Overlay Publisher — provider-neutral Go library and GitHub Action for building ebuilds and safely publishing Gentoo overlay updates.">
+  <meta name="color-scheme" content="light dark">
+  <title>Gentoo Overlay Publisher — Documentation</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.6; color-scheme: light dark; }
+    body { margin: 0; }
+    main { max-width: 52rem; margin: 0 auto; padding: 3rem 1.25rem 4rem; }
+    h1 { font-size: clamp(2rem, 6vw, 3rem); line-height: 1.15; margin: 0.25rem 0 1rem; }
+    h2 { margin-top: 2.2rem; }
+    .eyebrow { font-size: .85rem; letter-spacing: .08em; font-weight: 700; text-transform: uppercase; opacity: .7; }
+    .lead { font-size: 1.2rem; max-width: 44rem; }
+    .status { border: 1px solid #889; border-radius: .6rem; padding: .8rem 1rem; margin: 1.5rem 0; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(13rem,1fr)); gap: 1.25rem; }
+    .panel { border: 1px solid #8897; border-radius: .7rem; padding: 1rem; }
+    .panel h3 { margin: 0 0 .4rem; }
+    .panel p { margin: 0; }
+    a { color: #3478d4; }
+    @media(prefers-color-scheme:dark) { a { color: #91beff; } }
+    nav { display: flex; flex-wrap: wrap; gap: 1.2rem; margin: 2rem 0; }
+    footer { margin-top: 3rem; border-top: 1px solid #8896; padding-top: 1.25rem; opacity: .8; }
+  </style>
+</head>
+<body>
+<main>
+  <p class="eyebrow">Documentation · Gentoo tooling</p>
+  <h1>Gentoo Overlay Publisher</h1>
+  <p class="lead">A reusable ebuild construction and overlay reconciliation library, plus a GitHub Action for proposing safe Gentoo overlay updates.</p>
+  <div class="status"><strong>Project status:</strong> Design and foundation. The library, executable and Action are not yet released. This documentation is an intentionally lightweight starting point.</div>
+  <nav aria-label="Project links">
+    <a href="https://github.com/arran4/gentoo-overlay-publisher">Source repository</a>
+    <a href="https://github.com/arran4/gentoo-overlay-publisher-smoke-overlay">Smoke-test overlay</a>
+    <a href="https://github.com/arran4/goreleaser/pull/37">Original implementation reference</a>
+  </nav>
+
+  <h2>Three interfaces, one engine</h2>
+  <div class="grid">
+    <section class="panel"><h3>Go library</h3><p>Construct ebuilds with a typed IR, update metadata and Manifests, and produce inspectable change plans. No G2 or build-tool imports in the core.</p></section>
+    <section class="panel"><h3>GitHub Action</h3><p>Primary workflow integration: discover assets, calculate fresh changes automatically and open a reviewable overlay pull request.</p></section>
+    <section class="panel"><h3>CLI</h3><p>Scriptable and local use of the same engine. Default publish, optional read-only plan, and local-only apply.</p></section>
+  </div>
+
+  <h2>Intended source inputs</h2>
+  <p>Release assets and metadata may come from GitHub Releases, a restricted GoReleaser metadata adapter, local generated package trees or a dedicated typed manifest. Users should not be forced to write a custom candidate YAML just to publish a conventional release.</p>
+
+  <h2>Safety and verification</h2>
+  <p>Publishing must reconcile a freshly read target state and produce a branch and pull request rather than committing directly to the default branch. Verification may independently use G2 and Portage; secret-bearing publication tests must run only from trusted workflows.</p>
+
+  <h2>Coming documentation</h2>
+  <p>Once implemented and verified, this site will grow to include Action inputs and outputs, CLI examples, Go package API references, candidate-source formats, PR strategies and Gentoo end-to-end integration guides. Until then, examples here describe design intent, not a runnable released interface.</p>
+
+  <footer>Maintained with the <a href="https://github.com/arran4/gentoo-overlay-publisher">public source repository</a>. Contributions and design discussions belong in GitHub issues and pull requests.</footer>
+</main>
+</body>
+</html>
