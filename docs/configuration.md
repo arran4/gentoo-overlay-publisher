@@ -1,170 +1,247 @@
-# Configuration design: GoReleaser-first binary ebuild publication
+# Configuration design: portable GoReleaser Gentoo schema
 
-**Status: proposed contract, 11 November 2026. These inputs, fields, commands and Action tags are not implemented or released.** This document is intended to guide issue [#2](https://github.com/arran4/gentoo-overlay-publisher/issues/2), the GoReleaser adapter [#5](https://github.com/arran4/gentoo-overlay-publisher/issues/5) and the Action [#7](https://github.com/arran4/gentoo-overlay-publisher/issues/7).
+**Status: compatibility-first design, 11 November 2026; no parser or Action is implemented yet.** This replaces the earlier simplified `package.install` proposal. It is based on the actual [GoReleaser fork `config.Gentoo` / `GentooInstallItem` types](https://github.com/arran4/goreleaser/blob/feature/gentoo-ebuild/pkg/config/config.go), the fork's [complete documented `gentoo_overlays` YAML](https://github.com/arran4/goreleaser/blob/feature/gentoo-ebuild/www/content/customization/publish/gentoo.md), and the [install IR, reducer, renderer and goldens](https://github.com/arran4/goreleaser/tree/feature/gentoo-ebuild/internal/pipe/gentoo).
 
-## What the publisher does not configure
+## Core compatibility decision
 
-This project does **not** configure how GoReleaser builds, archives, releases, uploads or signs binaries. Those operations must already be completed. Gentoo Overlay Publisher receives published binary assets and produces only the ebuild and the accompanying Gentoo overlay file changes needed for Portage to install them.
+**Use `gentoo_overlays` as the top-level array in the standalone publisher's optional `.gentoo-overlay-publisher.yaml`, with the same per-entry fields as the fork**. Do not substitute `package: {install: {executable: ...}}`, rename `doins` to `install.files`, or reduce supported install commands to one generic `destination` field. Each existing `gentoo_overlays:` entry should be copyable from `.goreleaser.yaml` with *no mandatory transformation of Gentoo-specific fields*. The standalone file can have its own root `version: 1` schema marker, independent of GoReleaser's `version: 2`.
 
-GoReleaser is the **only initially implemented release-system source**. Other adapter interfaces may be defined but remain deferred to [#9](https://github.com/arran4/gentoo-overlay-publisher/issues/9).
+For a normal GitHub Action run, **neither file is compulsory**: detect a matching GoReleaser config at the release's source tag/commit if available, read its `gentoo_overlays` stanza when present, inspect already published release archives, and allow explicit overrides. A publisher config is valuable where the producer has no `gentoo_overlays` stanza or a different overlay destination/policy is needed.
 
-## User-facing entry points
+**Collapsed means omit defaulted or irrelevant keys from the *instance*, not remove supported keys from the schema.** Preserve the fork's full Gentoo helper and metadata vocabulary. V1 is binary-install ebuild publication, not upstream binary build/release/upload.
 
-The **GitHub Action is first-class** and the primary workflow interface; it calls the same small CLI and independent Go packages that scripts and local users may invoke.
+## Minimal migrated example: preserve original names
 
-- Default **publish**: resolve inputs, discover an already published release, generate a **fresh** overlay plan, validate and open/update a reviewable PR on a new branch. It must not require a saved plan or preceding local apply.
-- Explicit **plan**: read-only human-readable/JSON preview. Optional output file only at the user's request.
-- Explicit **apply**: modify a local target overlay with stale-content precondition checks, but never push, commit or create a PR.
-- With no unambiguous release input or target destination, fail with an actionable diagnostic rather than making a guess.
+From the GoReleaser file (excerpt; `version: 2` and `builds`/`archives` remain in GoReleaser):
 
-### Configuration sources
+```yaml
+gentoo_overlays:
+  - name: header
+    category: app-text
+    license: MIT
+    repository:
+      owner: arran4
+      name: gentoo-overlay-publisher-smoke-overlay
+      pull_request:
+        enabled: true
+        draft: true
+```
 
-These are layers, **not** alternative copies of a full release-engine configuration.
+Into the optional publisher's file, simply copy that block:
 
-1. **Explicit Action inputs / CLI flags** override publication preferences and selected package policy fields.
-2. **Optional publisher config** at `.gentoo-overlay-publisher.yaml` (or `.yml`) supplies package-specific Gentoo policy not provided through Action inputs.
-3. **Restricted GoReleaser config** at `.goreleaser.yaml` or `.goreleaser.yml`, or a path explicitly supplied through an Action input, can supply *hints* about already-created release assets: project name, selected builds/archive IDs, GOOS/GOARCH, archive naming and packaged file paths. If an earlier fork's `gentoo_overlays` stanza is available, its Gentoo-specific values may be imported through a specifically supported, validated compatibility subset. No arbitrary hooks/templates/env/script execution.
-4. **Existing overlay state** supplies package history and retained values for *updates* where a semantic value can be recognized reliably; it must not be indiscriminately reinterpreted as a full shell script to discover unspecified policy. Preserve unrelated content regardless.
-5. **Built-in safe defaults** fill only safe, unambiguous gaps.
+```yaml
+# .gentoo-overlay-publisher.yaml
+version: 1
+gentoo_overlays:
+  - name: header
+    category: app-text
+    license: MIT
+    repository:
+      owner: arran4
+      name: gentoo-overlay-publisher-smoke-overlay
+      pull_request:
+        enabled: true
+        draft: true
+```
 
-**Hard facts are not overridable:** actual release tag and publication status, archive bytes, archive contents, SHA/size, reachable public URL, target repository identity/current-base file digests, allowable paths and ownership boundaries. When hints disagree with facts, fail rather than silently invent a publishable result.
+No `project`/build commands, release-upload settings, full `archives` table or duplicated GoReleaser configuration are required. When the provided release proves one unambiguous executable per supported Linux archive, automatic installation may suffice; otherwise supply an explicit helper rule. The fork appends `-bin` to `name` when absent; preserve that compatibility where the name is safely resolved.
 
-**Provenance is important:** the planner should record each resolved choice's source (explicit input / publisher config / GoReleaser hint / preserved overlay value / default) without including secrets. A `--explain-config` or `plan --format json` should make resolution inspectable.
+## Full vocabulary retained, with optional values
 
-### Automatic discovery of GoReleaser config
+The fork's `config.Gentoo` schema has the following existing fields. Their YAML spelling and compatible meaning form the **porting baseline**:
 
-- `goreleaser-config: auto` (proposed default): when possible, inspect exactly one recognized file at the **source release tag/commit** (not whatever source branch HEAD happens to be when a `release.published` workflow runs). Explicit same-workflow artifact metadata may be associated with the matching commit/tag instead.
-- `goreleaser-config: none`: disable GoReleaser YAML hint loading altogether.
-- `goreleaser-config: ./path.yml`: inspect that explicit file as a restricted hint source.
-- If both filename variants are present without a selector, or the selected config is for a different release, require clarification/selection.
-- Never interpret the full GoReleaser config, call GoReleaser to rebuild, expand arbitrary templates, fetch secrets referenced by templates, or infer a public download URI from a local filename.
-- Reading `dist/artifacts.json` is a separate input; parse an explicit allowlist of required metadata instead of copying arbitrary `Extra` values. Do not include secrets in ebuilds, plans, diagnostics or Actions artifacts.
-
-## Safe-default policy (initial design)
-
-| Area | Default and contextual behavior | Unsafe behavior to avoid |
+| Concern | Existing fields (preserve names) | Intended location |
 | --- | --- | --- |
-| Release source | Prefer actual published GitHub Release assets when triggered by `release.published`; in a post-GoReleaser workflow, use selected `dist/artifacts.json` only after published assets/URLs are confirmed | Assuming a build file has been uploaded |
-| Package identity | Reuse explicitly selected package/known existing package; for new packages, tentatively retain fork-style `<project>-bin` and `app-misc` fallback **only where unique**, visible in the plan/PR | Guessing between multiple matches or changing an established package's category |
-| Ebuild version and EAPI | Validate Gentoo version syntax and use a supported, tested EAPI; preserve an existing package's established EAPI/policy if safe | Copying arbitrary SemVer prerelease values verbatim, inventing an unsupported EAPI |
-| Install destination | Keep an explicitly configured destination, including legacy `/opt/bin`, and preserve an existing package's policy **only if reliably known**; otherwise use Gentoo-appropriate `dobin`/binary destination for a new ordinary executable | Imposing the GoReleaser fork's `/opt/bin` default on every new package, guessing arbitrary shell behavior |
-| Install content | Inspect archive members; install only safely identified executable(s) and explicitly configured auxiliary files | Guessing between multiple executables, mixing architectures or treating all archive members as executables |
-| License/metadata | Use a valid Gentoo LICENSE expression provided by configuration or a reliably verified mapping; preserve unowned `metadata.xml` | Silently inventing a project's Gentoo license or replacing unrelated metadata |
-| Architecture | Map actual Linux archives to Gentoo architecture/KEYWORDS with validated arch-specific install semantics | Treating Gentoo architecture keywords as arbitrary USE flags or selecting packages for unsupported platforms |
-| Manifest/distfiles | Generate correct hashes from real bytes, unique distfile naming and thin/thick Manifest consistent with target overlay | Clobbering retained DIST entries, collisions, missing archive checksums |
-| Revisions | No-op on semantically identical output; create revisions only when meaningful content changes and policy allows | Churning `-rN` on harmless regeneration |
-| Retention | Keep existing versions by default; remove only under an **explicit** safe retention policy with a complete snapshot | Deleting retained versions or newer releases based on incomplete discovery |
-| Publishing | Target a separate tool-owned branch and reviewable **Draft PR**; do not merge, direct-push to default branch or force-push automatically | Touching user branches, direct default-branch modifications, implicit destructive operations |
-| Authentication | Caller supplies the target-overlay token through a secret/secure environment | Recording credentials in YAML, artifacts, logs or plans |
+| Selection and package identity | `id`, `ids`, `name`, `category`, `overlay_path`, `bin`, `type` | Provider-neutral package config, plus ID→release-archive adapter |
+| Metadata and Gentoo package policy | `homepage`, `description`, `long_description`, `license`, `keywords`, `version_representation`, `bugs_to`, `maintainers`, `upstream`, `useflags`, `eclasses` | Package/ebuild model and metadata.xml updater |
+| Automatic install and helpers | `bindir`, `dobin`, `doconfd`, `dodir`, `dodoc`, `doenvd`, `doexe`, `doheader`, `doinitd`, `doins`, `doman`, `dosbin`, `dosym`, `systemd`, `extra_install` | Public install-config model → typed ebuild IR → renderer |
+| Auxiliary files | `files` (`glob`, `name_template`), `skip_files_validation` | Trusted source-file resolver; package `files/` emission |
+| Version and retention | `keep_versions`, `conflict_resolution`, `version_retention_strategy` | Overlay planner; no spurious new `-rN` revisions |
+| Manifests/cache | `manifest_hashes`, `thin_manifests`, `meta_cache` | Manifest and metadata planner, validated against `metadata/layout.conf` |
+| Publishing | `repository`, `commit_author`, `commit_msg_template`, `skip_upload` | Separate Git/PR publisher; config shape supported without importing GoReleaser clients |
 
-A default is not a license to fabricate data. Missing required Gentoo-specific fields, credentials, ambiguous install layouts or unsupported GoReleaser templates should produce a clear error showing which Action input/config key will resolve the ambiguity.
+In the original fork `bin` **must be true** and `type` is effectively limited to `bin`. The new binary-only publisher can treat omission of both as `bin`; explicit `bin: true` and `type: bin` must remain accepted for painless migration. Do not silently accept unsupported nonbinary `type` values. Existing fork behavior and defaults, including `/opt/bin`, `app-misc`, revision conflict resolution, and `-bin` naming, must be recorded and tested. New defaults may be improved for Gentoo correctness **only as explicit compatibility-documented differences**, not by changing an existing entry's requested semantics.
 
-### Optional publisher-specific YAML
+### Install item shape: do not reinvent it
 
-The file should be small and contain **Gentoo-only intent**, not a GoReleaser build recipe. Proposed shape, not yet an API/schema:
+The eleven item families `dobin`, `doconfd`, `doenvd`, `doexe`, `doheader`, `doinitd`, `doins`, `dosbin`, `dosym`, `systemd` (plus their supported behaviors) share the fork's item shape:
+
+```yaml
+doins:
+  - src_id: default
+    src: conf/app.conf
+    dst: /etc/app/app.conf
+    use: [config]
+    archs: [amd64, arm64]
+```
+
+Fields are `src_id` (selected archive ID), `src` (source/archive member), `dst` (destination/rename), `use` (USE conditions, including negation), and `archs` (architecture guard). `src_id` suppresses only the corresponding default automatic binary install *for the matched archive/architecture/binary*, without discarding unrelated automatic installs. Archive ID, member path and architecture coverage must be validated against the actual released artifacts.
+
+The list families `dodir`, `dodoc`, `doman` remain simple string lists, preserving the fork's configuration. The **IR** may internally represent all these as typed operations (including `newexe`, `newins`, `newbin`, `newman`, etc.), but YAML should remain compatible with the original helper-oriented structure. Use the fork's typed `InstallOp` descriptors, state-family tracking, condition planner and reducer rather than rebuilding ebuild shell output as string concatenation.
+
+### Representative richer configuration
+
+This example is **illustrative**; its source archive must actually contain the indicated paths for it to validate. Every omitted helper family in the table above remains supported.
 
 ```yaml
 version: 1
-goreleaser:
-  config: auto   # auto, none, or an explicit path
-package:
-  atom: app-text/header-bin
-  license: MIT
-  # When already maintained in the overlay, preserve explicitly known policy.
-  install:
-    executable: header
-    destination: /usr/bin/header
-overlay:
-  repository: arran4/gentoo-overlay-publisher-smoke-overlay
-  base: main
-  retention:
-    mode: preserve
-publication:
-  pull_request: true
-  draft: true
+gentoo_overlays:
+  - id: myproject
+    ids: [default, plugin]
+    name: myproject
+    category: app-admin
+    license: MIT
+    homepage: https://example.invalid/myproject
+    description: Example binary package
+    bindir: /usr/bin
+    keywords: ["~amd64", "~arm64"]
+    eclasses: [systemd]
+    useflags:
+      - flag: systemd
+        description: Install the systemd service
+      - flag: plugin
+        description: Install the optional plugin
+    doexe:
+      - src_id: default
+        src: myproject
+        dst: /usr/bin/myproject
+      - src_id: plugin
+        src: plugin
+        dst: /usr/libexec/myproject/plugin
+        use: [plugin]
+        archs: [amd64, arm64]
+    doins:
+      - src_id: default
+        src: config/example.conf
+        dst: /etc/myproject/example.conf
+    systemd:
+      - src_id: default
+        src: share/myproject.service
+        dst: myproject.service
+        use: [systemd]
+    dodoc: [README.md]
+    doman: [man/myproject.1]
+    keep_versions: 3
+    version_retention_strategy: keep_latest
+    conflict_resolution: Revision
+    repository:
+      owner: arran4
+      name: gentoo-overlay-publisher-smoke-overlay
+      pull_request:
+        enabled: true
+        draft: true
 ```
 
-Deliberately leave credentials, upstream artifact upload settings and full GoReleaser templates **out**. More complex archive member/install mappings may require separate typed structures as IR gains concrete tested use cases.
+This preserves the original structure rather than forcing a second Gentoo policy model. Optional `files`, `maintainers`, `upstream`, `extra_install`, `meta_cache` and other fields can be added without changing nesting.
 
-### Contextual GoReleaser import should not override Gentoo meaning
+**Special cases:** `extra_install` is raw ebuild shell from trusted configuration, **not** code to execute by the publisher itself; preserve support and use G2/Portage validation without promising arbitrary static security analysis. `files` refers to additional trusted source-files to bundle into the overlay package's `files/` directory, not to upstream archives that the publisher uploads. `skip_files_validation` is explicit opt-out only, never inferred. `meta_cache` cannot claim complete eclass evaluation where G2/Portage is required.
 
-The source fork [`defaultGentooConfig`](https://github.com/arran4/goreleaser/blob/feature/gentoo-ebuild/internal/pipe/gentoo/gentoo.go) defaults `bindir` to `/opt/bin`, category to `app-misc`, appends `-bin` to the package name, and requires an explicit license. This history is valuable for legacy compatibility, **but the new tool should not automatically impose all legacy defaults** on fresh packages. Explicit compatible `gentoo_overlays` fields should retain their chosen destination and install operations. Existing package ebuilds may not be safely analyzed as arbitrary shell code; in that case, preserve raw content and require explicit install destination rather than assert it was inferred.
+## Configuration discovery, overlays and overrides
 
-The common GoReleaser `nfpms` config is **not** automatically a Gentoo configuration. Its file/layout/license fields can only be used as *verified hints* where they are compatible with Gentoo semantics.
+Keep existing `gentoo_overlays` entries in GoReleaser `.goreleaser.yaml` or `.goreleaser.yml` as a **first-class source**. The standalone publisher may read a standalone `.gentoo-overlay-publisher.yaml` to override or add selected entries **by `id`/resolved package destination**, without a second fully duplicated policy.
 
-## GitHub Action quick-start patterns (not runnable yet)
+1. **Hard facts:** published release identity and tag, URLs, archive bytes/checksum/member layout, overlay base snapshot and repo ownership are validated separately and **are not overrideable** by configuration.
+2. **Explicit Action/CLI overrides** select release source, target overlay, package ID and selective Gentoo/publishing options.
+3. **Optional publisher YAML** supplies the same `gentoo_overlays` per-entry structure, including all helper families, and may add new overlays.
+4. **GoReleaser YAML:** look up source config at the published tag/commit. Parse only `gentoo_overlays`, allowlisted `project_name`/`builds`/`archives` hints and selected releases; do **not** evaluate arbitrary templates, hooks or build steps.
+5. **Existing overlay:** retain prior package settings and unowned metadata where safely observable; do not parse arbitrary existing ebuild Bash to invent install intent.
+6. **Safe defaults:** fill only truly missing, unambiguous values. Publishing defaults to an isolated Draft PR, no direct default-branch push or implicit merge, no destructive retention by default, semantic no-op on rerun.
 
-These examples are **design targets** for the eventual README. The Action's `@v1` tag and input contract do not exist yet. Once the Action has been tested and released, replace tags with approved release SHA/version pins.
+**Important:** merging overlay lists is an ordered, typed operation, *not* YAML list concatenation or a blind deep map merge. Select the same `id`/destination, reject duplicates, and replace complete install-family lists when overridden unless explicitly documented otherwise. Define null/empty/omitted semantics for lists, and display the provenance of each resolved field with `--explain-config` without exposing secrets. Cross-provider internal config types should never import GoReleaser's `pkg/config`.
 
-### A. Trigger after a published GitHub Release
+**Legacy publishing fields:** accept the existing `repository` shape (owner, name, branch, `pull_request.enabled/base/draft`) and `commit_author`/`commit_msg_template`. Map them into a distinct publisher config. Historical inline `repository.token`, `pull_request.token` and `git.private_key` require a deliberate, secure migration policy—do not copy secrets into candidate plans or parsed artifact metadata. Translate legacy `skip_upload` to an explicit **nonpublishing** mode rather than treating it as permission to upload binaries. Distinguish package versions from the publisher's own repo version.
 
-This is convenient for a separate release-follow-up workflow. It does **not** change when or how the source project publishes binary archives.
+## Public Go API and refactor plan
+
+**Default compatibility direction:** match existing Gentoo YAML keys, named install helpers and behavior while **refactoring the internal code** to form a cohesive public library. There are no pre-existing standalone library consumers that force awkward GoReleaser package boundaries.
+
+Proposed single-module responsibilities:
+
+```text
+config/                    # GentooOverlay, InstallItem, UseFlag, Metadata,
+                           # YAML parsing, validation and migration
+ebuild/ir/                 # typed install program, op descriptors and conditions
+ebuild/render/             # ebuild/phase rendering, eclass/USE handling
+release/                   # normalized published-archive descriptors, no GoReleaser
+version/                   # Gentoo package versions and revisions
+manifest/                  # existing Manifest preservation and update
+metadata/                  # metadata.xml updates, lossless unrelated content
+overlay/                   # snapshots, retention, deterministic ChangeSet
+internal/adapters/goreleaser/
+                           # dist/artifacts.json, restricted YAML and release mapping
+internal/gitpublish/       # Git branches, API/PR publication, auth boundaries
+cmd/gentoo-overlay-publisher/
+action.yml                 # wrapper on exactly the same CLI/runtime
+```
+
+The library exposes a portable **`config.GentooOverlay` and `config.InstallItem` schema** (names subject to implementation design), and converts to a validated, resolved config and then to ebuild IR. A future GoReleaser integration should ideally import the shared schema/types or use a very small, mechanically tested compatibility adapter; it must **not** duplicate a huge `Gentoo` struct and manually map each `do*` family. The public `overlay` planner can accept an already-generated ebuild without importing the IR.
+
+**Refactor by responsibility, not just directory movement:**
+
+| Fork source | New responsibility | Refactoring intent |
+| --- | --- | --- |
+| `pkg/config/config.go` Gentoo types, `internal/pipe/gentoo/config.go`, `gentoo.go` | `config` + narrow orchestration | Separate raw YAML, resolved immutable policy, release adapter and provider credentials |
+| `installop.go`, `condition.go`, `install.go`, `reducer.go` | `ebuild/ir` planner, typed operations and reducer | Preserve semantic state/renames/guards and tests; remove GoReleaser context types |
+| `ebuild.go`, `templates/ebuild.tmpl`, `generator.go` | `ebuild/render` and generation service | Explicit typed input/output and testable rendering, no release upload |
+| `release.go`, `generated.go` | `release` model and `internal/adapters/goreleaser` | Normalize actual existing archives; avoid `artifact.Extra` leakage and provider internals |
+| `version.go`, `retention.go`, `changeset.go`, `manifest.go`, `metadata.go` | `version`, `overlay`, `manifest`, `metadata` | Keep deterministic, independently testable reconciliation |
+| `repository.go`, `publish.go` | `internal/gitpublish` | Separate Git/SCM I/O, PR safety and credentials from pure overlay planning |
+
+**Full functional port expected.** Do not intentionally discard source-tested helper families, architecture-specific installs, binary suppression by `src_id`, eclass-order preservation, custom install paths, metadata/Manifest, retention, publication strategies, or tested failure propagation because an initial example is small. Fix existing source defects where identified; record deliberate behavior changes in compatibility tests.
+
+## Required compatibility tests before acceptance
+
+- Parse the **actual fork `gentoo_overlays` YAML block** using the standalone config parser without rewriting its Gentoo keys. Re-serialize/normalize and verify all relevant fields, including every `do*` family, `src_id`, `src`, `dst`, `use`, `archs`, `files`, `useflags`, `upstream`, `eclasses` and PR settings.
+- Compare representative generated ebuild output to the fork's **real goldens**: `TestComplexInstallersTracking`, `TestDoRunWithDoinsAndDoman`, `TestDoRunWithSystemdAndUseFlags`, architecture-specific suppression, rename/exeinto/insinto state, multiarchive/multibinary cases, extra_install and metadata updates.
+- Confirm valid override merging and precedence: omitted/empty/null list distinction, multiple `gentoo_overlays` entries, duplicate IDs and duplicate package destination rejection, explicit vs inferred `bindir`, safe no-op/retention/revision handling, and deterministic release-config selection.
+- Prove a GoReleaser-free external program can import the configuration and IR without any GoReleaser/G2/GitHub dependencies, and independently plan changes with the `overlay` package.
+- Verify that GoReleaser's accepted YAML has a **very small mechanically testable translation path** into the shared library config: future upstream adapter should reduce production Gentoo LOC instead of copying the full implementation.
+- Keep source artifact build/upload outside the tool; real integration tests consume existing [header v0.0.6](https://github.com/arran4/header/releases/tag/v0.0.6) and publish **only Gentoo overlay files** to [the smoke repository](https://github.com/arran4/gentoo-overlay-publisher-smoke-overlay). No PR auto-merge.
+
+## Action and CLI workflow examples (not yet runnable)
+
+**The caller chooses the workflow trigger.** No `@v1` Action exists until this design and code pass integration testing.
 
 ```yaml
-name: Propose Gentoo ebuild update
-
+# Workflow A: in a separate workflow after release.published.
+name: Propose Gentoo ebuild
 on:
   release:
     types: [published]
-
 permissions:
   contents: read
-
 jobs:
-  ebuild:
+  publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.release.tag_name }}
-      - uses: arran4/gentoo-overlay-publisher@v1 # FUTURE - not released
+      - uses: arran4/gentoo-overlay-publisher@v1 # FUTURE, unreleased
         with:
           overlay-repository: arran4/gentoo-overlay-publisher-smoke-overlay
           package: app-text/header-bin
-          source: github-release
           goreleaser-config: auto
           token: ${{ secrets.OVERLAY_PUBLISH_TOKEN }}
 ```
 
-### B. Call immediately after the existing GoReleaser release step
-
-In the **same trusted job** that already ran GoReleaser, place the Action **after** that project's existing successful release/upload step. Reuse the existing `dist/artifacts.json` when available; the publisher still verifies the assets are actually published and fetchable.
-
 ```yaml
-# Existing build/release step runs first. It is NOT part of this publisher.
-- uses: arran4/gentoo-overlay-publisher@v1 # FUTURE - not released
+# Workflow B: AFTER the caller's existing successful GoReleaser release/upload step.
+- uses: arran4/gentoo-overlay-publisher@v1 # FUTURE, unreleased
   with:
     overlay-repository: arran4/gentoo-overlay-publisher-smoke-overlay
-    package: app-text/header-bin
     source: goreleaser-artifacts
     artifact-directory: dist
     goreleaser-config: auto
     token: ${{ secrets.OVERLAY_PUBLISH_TOKEN }}
 ```
 
-### C. Explicit preview / local scripting
+For a local script, the same CLI accepts an explicit existing release and overlay destination; implicit `publish` constructs a fresh plan. Explicit `plan` previews and `apply` modifies only local files. Do not require a saved plan or a publisher YAML when a matching GoReleaser `gentoo_overlays` stanza and validated assets are sufficient.
 
-```sh
-# FUTURE CLI - not implemented
-gentoo-overlay-publisher plan \
-  --release arran4/header@v0.0.6 \
-  --package app-text/header-bin \
-  --overlay ./checkout \
-  --explain-config
+## Small remaining design questions
 
-# Same CLI has implicit publish, which ALWAYS plans freshly against the target.
-gentoo-overlay-publisher \
-  --release arran4/header@v0.0.6 \
-  --package app-text/header-bin \
-  --repository arran4/gentoo-overlay-publisher-smoke-overlay
-```
+1. **Config merging:** When the same `gentoo_overlays` ID exists in the GoReleaser and publisher YAML, should the latter replace the entire Gentoo entry or override field-by-field while treating each `do*` list as a replace-whole value? Recommended: field-by-field scalar overrides and replace-whole collection values, with explicit null/empty handling.
+2. **Legacy credential fields:** Preserve the fork's `repository` YAML shape, but should token/private-key literal keys be strictly rejected in the public publisher YAML in favor of Action/CLI secret inputs? Recommended: reject literal embedded secrets; support secure environment references and never serialize credentials.
+3. **Names:** Continue defaulting `app-misc/<project>-bin` for one unambiguous new package as the fork did, but refuse conflict/unknown licenses. Preserve existing target category and package identity; offer explicit overrides. This can be decided and tested with the header fixture.
 
-All three patterns should share the same resolved configuration object, discovered asset model, change planner, error codes and PR safety rules. **A caller chooses the event/trigger** and the Action does not force it to be `release.published`.
-
-## Remaining questions, not blanket blockers
-
-1. Is the split between GoReleaser **build hints** and optional publisher **Gentoo policy** preferable to interpreting the old fork's `gentoo_overlays` stanza as the primary source when present? Suggested design: accept a validated compatibility subset first and let explicit publisher configuration override it.
-2. For a **new package** with no explicit category/name, should `app-misc/<project>-bin` remain the visible safe default when unique, or should the Action require `package:` from day one? For existing managed packages, preserve the actual atom and explicit choices.
-3. Which fields are genuinely inferable from existing ebuild content without invoking G2? Prefer conservative preservation and explicit configuration over a brittle Bash parser. This can be settled by first implementing the `header` fixture and recording its limitations.
-
-An incomplete configuration should produce a precise validation diagnostic rather than silently publishing a malformed or mislocated ebuild.
+Implementation should be a **semantic refactor of source files and data types**, with the source PR providing behavior and tests, not just a file copy into different directories.
